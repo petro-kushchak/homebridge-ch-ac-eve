@@ -1,6 +1,6 @@
 {
   "pluginAlias": "Cooper&Hunter AC",
-  "pluginType": "platform",
+  "pluginType": "accessory",
   "singular": true,
   "schema": {
     "type": "object",
