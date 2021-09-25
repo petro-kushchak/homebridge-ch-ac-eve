@@ -1,3 +1,4 @@
+import http from 'http';
 import { Service, Logging, AccessoryConfig, API, AccessoryPlugin, HAP, CharacteristicValue } from 'homebridge';
 import { Device, DeviceInfo, DeviceOptions } from './lib/deviceFactory';
 import { Commands } from './lib/commands';
@@ -12,13 +13,18 @@ export = (api: API) => {
   api.registerAccessory('homebridge-ch-ac-ts', 'Cooper&HunterAC', CHThermostatAccessory);
 };
 
+interface AutomationReturn {
+  error: boolean;
+  message: string;
+  cooldownActive?: boolean;
+}
+
 /**
  * Platform Accessory
  * An instance of this class is created for each accessory your platform registers
  * Each accessory may expose multiple services of different service types.
  */
 class CHThermostatAccessory implements AccessoryPlugin {
-  private readonly logger: Logging;
   private readonly device: Device;
   private readonly name: string;
   private readonly serial: string;
@@ -27,13 +33,13 @@ class CHThermostatAccessory implements AccessoryPlugin {
   private readonly serviceInfo: Service;
   private readonly host: string;
   private readonly updateInterval: number;
+  private readonly httpPort: number;
+  private currentTemp: number;
 
   constructor(
-    logger: Logging, config: AccessoryConfig, api: API) {
+    private logger: Logging, private config: AccessoryConfig, api: API) {
 
     hap = api.hap;
-
-    this.logger = logger;
 
     // extract name from config
     this.name = config.name;
@@ -41,6 +47,8 @@ class CHThermostatAccessory implements AccessoryPlugin {
     this.serial = config.serial;
     this.model = config.model || 'Cooper&Hunter';
     this.updateInterval = config.updateInterval || 10000;
+    this.httpPort = this.config.httpPort || 4567;
+    this.currentTemp = 20;
 
     // Set AccessoryInformation
     this.serviceInfo = new hap.Service.AccessoryInformation()
@@ -95,6 +103,59 @@ class CHThermostatAccessory implements AccessoryPlugin {
       .onSet(this.setRotationSpeed.bind(this));
 
     this.device = this.discover(this.thermostatService);
+
+    this.logger.info('Setting up HTTP server on port ' + this.httpPort + '...');
+    const server = http.createServer();
+    server.listen(this.httpPort);
+    server.on('request', (request: http.IncomingMessage, response: http.ServerResponse) => {
+      let results: AutomationReturn = {
+        error: true,
+        message: 'Malformed URL.',
+      };
+      if (request.url) {
+        results = this.httpHandler(request.url);
+      }
+      response.writeHead(results.error ? 500 : 200);
+      response.write(JSON.stringify(results));
+      response.end();
+    });
+
+  }
+
+  httpHandler(fullPath: string): AutomationReturn {
+    this.logger.info('Received request: %s', fullPath);
+
+    const parts = fullPath.split('/');
+
+    if (parts.length < 2) {
+      return {
+        error: true,
+        message: 'Malformed uri',
+      };
+    }
+
+    //update accessory temp value
+    //uri example: /temp/22.5%C2%B0C
+    //usually due to HomeKit automation when original uri is /temp/22.5C
+
+    if (parts[1] === 'temp') {
+      const tempParts = parts[2].split('%');
+      if (tempParts.length > 0) {
+        this.currentTemp = parseFloat('' + tempParts[0]);
+        const message = 'Updated accessory current temperature to: ' + this.currentTemp;
+        this.logger.info(message);
+        return {
+          error: false,
+          message: message,
+        };
+      }
+    }
+
+    return {
+      error: false,
+      message: 'OK',
+    };
+
   }
 
   getServices(): Service[] {
@@ -107,11 +168,26 @@ class CHThermostatAccessory implements AccessoryPlugin {
   /**
    * Handle requests to get the current value of the "Current Heating Cooling State" characteristic
    */
-  getCurrentHeaterCoolerState() {
-    const currentValue = hap.Characteristic.CurrentHeatingCoolingState.OFF;
+  getCurrentHeaterCoolerState(): CharacteristicValue {
+    let mode = this.device.getMode(),
+      state;
 
-    this.logger.info('Triggered GET CurrentHeatingCoolingState: %s', currentValue);
-    return currentValue;
+    switch (mode) {
+      case Commands.mode.value.cool:
+        state = hap.Characteristic.CurrentHeaterCoolerState.COOLING;
+        break;
+      case Commands.mode.value.heat:
+        state = hap.Characteristic.CurrentHeaterCoolerState.HEATING;
+        break;
+      case Commands.mode.value.auto:
+        state = hap.Characteristic.CurrentHeaterCoolerState.IDLE;
+        break;
+      default:
+        state = hap.Characteristic.CurrentHeaterCoolerState.INACTIVE;
+    }
+
+    this.logger.info('Triggered GET CurrentHeatingCoolingState: %s', state);
+    return state;
   }
 
 
@@ -153,9 +229,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
    */
   getCurrentTemperature(): number {
     // set this to a valid value for CurrentTemperature
-    const currentValue = 30;// TODO: read temp from external source
-
-    return currentValue;
+    return this.currentTemp;
   }
 
 
@@ -260,7 +334,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
       port: 8000 + parseInt(this.host.split('.')[3]),
       updateInterval: this.updateInterval,
       onStatus: (deviceInfo: DeviceInfo) => {
-        this.logger.info('Status updated: %s props: %s', deviceInfo, JSON.stringify(deviceInfo.props));
+        this.logger.info('Status updated: %s props: %s', deviceInfo.name, JSON.stringify(deviceInfo.props));
 
         if (deviceInfo.bound === false) {
           return;

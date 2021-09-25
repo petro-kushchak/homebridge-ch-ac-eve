@@ -1,7 +1,7 @@
 {
   "displayName": "Homebridge Cooper&Hunter AC",
   "name": "@petro-kushchak/homebridge-ch-ac-ts",
-  "version": "1.0.0",
+  "version": "1.0.4",
   "description": "Cooper&Hunter AC plugin for Homebridge (Homekit) with Web Hook Data Sharing ",
   "license": "MIT",
   "repository": {
