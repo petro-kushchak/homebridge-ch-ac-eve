@@ -1,5 +1,5 @@
 {
-  "pluginAlias": "ExampleHomebridgePlugin",
+  "pluginAlias": "Cooper&Hunter AC",
   "pluginType": "platform",
   "singular": true,
   "schema": {
@@ -9,7 +9,31 @@
         "title": "Name",
         "type": "string",
         "required": true,
-        "default": "Example Dynamic Platform"
+        "default": "Cooper&Hunter AC"
+      },
+      "model": {
+        "title": "Model",
+        "type": "string",
+        "required": false,
+        "default": "CH-S09FTXE WIFI"
+      },
+      "serial": {
+        "title": "Serial",
+        "type": "string",
+        "required": false,
+        "default": "ch-00-00-01"
+      },
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "required": true,
+        "default": "192.168.1.X"
+      },
+      "updateInterval": {
+        "title": "Update Interval",
+        "type": "number",
+        "required": false,
+        "default": "10000"
       }
     }
   }

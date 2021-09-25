@@ -1,0 +1,19 @@
+{
+    "bridge": {
+        "name": "Homebridge",
+        "username": "CC:22:3D:E3:CE:30",
+        "port": 51826,
+        "pin": "123-45-568"
+    },
+    "accessories": [
+        {
+            "accessory": "C&H-AC",
+            "host": "192.168.1.X",
+            "name": "Bedroom AC",
+            "serial": "ch-00-00-01",
+            "model": "CH-S09FTXE WIFI",
+            "webHookPort": 1234,
+            "updateInterval": 10000
+        }
+    ]
+}
