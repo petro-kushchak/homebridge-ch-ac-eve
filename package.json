@@ -1,5 +1,4 @@
 {
-  "private": true,
   "displayName": "Homebridge Cooper&Hunter AC",
   "name": "@petro-kushchak/homebridge-ch-ac-ts",
   "version": "1.0.0",

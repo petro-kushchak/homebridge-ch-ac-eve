@@ -1,4 +1,4 @@
-import { Service, Logging, AccessoryConfig, API, AccessoryPlugin, HAP, Characteristic, CharacteristicValue } from 'homebridge';
+import { Service, Logging, AccessoryConfig, API, AccessoryPlugin, HAP, CharacteristicValue } from 'homebridge';
 import { Device, DeviceInfo, DeviceOptions } from './lib/deviceFactory';
 import { Commands } from './lib/commands';
 
@@ -9,7 +9,7 @@ let hap: HAP;
  */
 export = (api: API) => {
   hap = api.hap;
-  api.registerAccessory("homebridge-ch-ac-ts", "Cooper&HunterAC", CHThermostatAccessory);
+  api.registerAccessory('homebridge-ch-ac-ts', 'Cooper&HunterAC', CHThermostatAccessory);
 };
 
 /**
@@ -39,12 +39,12 @@ class CHThermostatAccessory implements AccessoryPlugin {
     this.name = config.name;
     this.host = config.ip;
     this.serial = config.serial;
-    this.model = config.model || "Cooper&Hunter";
+    this.model = config.model || 'Cooper&Hunter';
     this.updateInterval = config.updateInterval || 10000;
 
     // Set AccessoryInformation
     this.serviceInfo = new hap.Service.AccessoryInformation()
-      .setCharacteristic(hap.Characteristic.Manufacturer, "Cooper&Hunter")
+      .setCharacteristic(hap.Characteristic.Manufacturer, 'Cooper&Hunter')
       .setCharacteristic(hap.Characteristic.Name, this.name)
       .setCharacteristic(hap.Characteristic.Model, this.model)
       .setCharacteristic(hap.Characteristic.SerialNumber, this.serial);
@@ -100,7 +100,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
   getServices(): Service[] {
     return [
       this.serviceInfo,
-      this.thermostatService
+      this.thermostatService,
     ];
   }
 
@@ -205,8 +205,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
   getThermostatActive() {
     return this.device.getPower() === Commands.power.value.off
       ? hap.Characteristic.Active.INACTIVE
-      : hap.Characteristic.Active.ACTIVE
-
+      : hap.Characteristic.Active.ACTIVE;
   }
 
   setThermostatActive(value: CharacteristicValue) {
@@ -219,7 +218,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
       this.device.setPower(
         value === hap.Characteristic.Active.ACTIVE
           ? Commands.power.value.on
-          : Commands.power.value.off
+          : Commands.power.value.off,
       );
     }
   }
@@ -227,7 +226,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
   getSwingMode(): CharacteristicValue {
     return Commands.swingVert.fixedValues.includes(this.device.getSwingVert())
       ? hap.Characteristic.SwingMode.SWING_DISABLED
-      : hap.Characteristic.SwingMode.SWING_ENABLED
+      : hap.Characteristic.SwingMode.SWING_ENABLED;
   }
 
   setSwingMode(value: CharacteristicValue) {
@@ -291,39 +290,39 @@ class CHThermostatAccessory implements AccessoryPlugin {
           .updateValue(this.getRotationSpeed());
       },
       onUpdate: (deviceInfo: DeviceInfo) => {
-        this.logger.info('Status updated on %s', deviceInfo.name)
+        this.logger.info('Status updated on %s', deviceInfo.name);
       },
       onConnected: (deviceInfo: DeviceInfo) => {
-        if (deviceInfo.bound == true) {
+        if (deviceInfo.bound === true) {
           this.logger.info(
             'Connected to device "%s" with IP address "%s"',
             deviceInfo.name,
-            deviceInfo.address
+            deviceInfo.address,
           );
         } else {
           this.logger.info(
-            "Error connecting to %s with IP address %s",
+            'Error connecting to %s with IP address %s',
             deviceInfo.name,
-            deviceInfo.address
+            deviceInfo.address,
           );
         }
       },
       onError: (deviceInfo: DeviceInfo) => {
         this.logger.info(
-          "Error communicating with device %s with IP address %s",
+          'Error communicating with device %s with IP address %s',
           deviceInfo.name,
-          deviceInfo.address
+          deviceInfo.address,
         );
       },
       onDisconnected: (deviceInfo: DeviceInfo) => {
         this.logger.info(
-          "Disconnected from device %s with IP address %s",
+          'Disconnected from device %s with IP address %s',
           deviceInfo.name,
-          deviceInfo.address
+          deviceInfo.address,
         );
       },
     };
-    this.logger.info("Start discover device %s", deviceOptions.host);
+    this.logger.info('Start discover device %s', deviceOptions.host);
     return new Device(deviceOptions, this.logger);
   }
 }
