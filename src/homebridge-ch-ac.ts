@@ -1,4 +1,6 @@
 import http from 'http';
+import fakegato from 'fakegato-history';
+
 import { Service, Logging, AccessoryConfig, API, AccessoryPlugin, HAP, CharacteristicValue } from 'homebridge';
 import { Device, DeviceInfo, DeviceOptions } from './lib/deviceFactory';
 import { Commands } from './lib/commands';
@@ -12,6 +14,31 @@ export = (api: API) => {
   hap = api.hap;
   api.registerAccessory('homebridge-ch-ac-ts', 'Cooper&HunterAC', CHThermostatAccessory);
 };
+
+interface HistoryServiceEntry {
+  time: number;
+  temp: number;
+}
+
+interface HistoryService {
+  addEntry(entry: HistoryServiceEntry): void;
+}
+
+interface HistoryServiceStorageEntry {
+  time: number;
+  temp: number;
+}
+
+interface HistoryServiceStorageReaderOptions {
+  service: unknown;
+  callback: (err: unknown, data: string) => void;
+}
+
+interface HistoryServiceStorage {
+  globalFakeGatoStorage: {
+    read: (options: HistoryServiceStorageReaderOptions) => void;
+  };
+}
 
 interface AutomationReturn {
   error: boolean;
@@ -34,15 +61,26 @@ class CHThermostatAccessory implements AccessoryPlugin {
   private readonly host: string;
   private readonly updateInterval: number;
   private readonly httpPort: number;
+  private readonly log: Logging;
+  private readonly displayName: string;
+
+  private readonly historyService: unknown;
+
   private currentTemp: number;
 
   constructor(
-    private logger: Logging, private config: AccessoryConfig, api: API) {
+    private logger: Logging, private config: AccessoryConfig, private api: API) {
 
     hap = api.hap;
 
+    this.log = logger;
+
+    const FakeGatoHistoryService = fakegato(api);
+    this.historyService = new FakeGatoHistoryService('thermo', this, { storage: 'fs' });
+
     // extract name from config
     this.name = config.name;
+    this.displayName = this.name;
     this.host = config.host;
     this.serial = config.serial;
     this.model = config.model || 'Cooper&Hunter';
@@ -97,12 +135,14 @@ class CHThermostatAccessory implements AccessoryPlugin {
         format: hap.Characteristic.Formats.UINT8,
         maxValue: 6,
         minValue: 1,
-        validValues: [1, 2, 3, 4, 5, 6], // 6 - auto
+        validValues: [0, 1, 2, 3, 4, 5, 6], // 6 - auto
       })
       .onGet(this.getRotationSpeed.bind(this))
       .onSet(this.setRotationSpeed.bind(this));
 
     this.device = this.discover(this.thermostatService);
+
+    this.readLastTemperature();
 
     this.logger.info('Setting up HTTP server on port ' + this.httpPort + '...');
     const server = http.createServer();
@@ -142,6 +182,9 @@ class CHThermostatAccessory implements AccessoryPlugin {
       const tempParts = parts[2].split('%');
       if (tempParts.length > 0) {
         this.currentTemp = parseFloat('' + tempParts[0]);
+
+        (this.historyService as HistoryService).addEntry({ time: Math.round(new Date().valueOf() / 1000), temp: this.currentTemp });
+
         const message = 'Updated accessory current temperature to: ' + this.currentTemp;
         this.logger.info(message);
         return {
@@ -162,15 +205,52 @@ class CHThermostatAccessory implements AccessoryPlugin {
     return [
       this.serviceInfo,
       this.thermostatService,
+      this.historyService as Service,
     ];
+  }
+
+  readLastTemperature() {
+    const lastEntryHandler = (lastEntry: string, history: HistoryServiceStorageEntry[]) => {
+      this.logger.debug('HISTORY total: %s', history.length);
+      const lastItem = history.pop();
+      this.logger.debug('HISTORY last itme: %s', lastItem);
+      this.currentTemp = lastItem.temp;
+    };
+
+    const storage = ((this.api as unknown) as HistoryServiceStorage).globalFakeGatoStorage;
+
+    if (!storage) {
+      this.logger.debug('Failed to access globalFakeGatoStorage');
+      return;
+    }
+
+    storage.read({
+      service: this.historyService,
+      callback: function (err, data) {
+        if (!err) {
+          if (data) {
+            try {
+              this.log.debug('read data from', this.accessoryName, ':', data);
+              const jsonFile = typeof (data) === 'object' ? data : JSON.parse(data);
+              lastEntryHandler(jsonFile.lastEntry, jsonFile.history as HistoryServiceStorageEntry[]);
+            } catch (e) {
+              this.log.debug('**ERROR fetching persisting data restart from zero - invalid JSON**', e);
+            }
+          }
+        } else {
+          // file don't exists
+          this.log.debug('**ERROR fetching persisting data: file dont exists', err);
+        }
+      }.bind(this),
+    });
   }
 
   /**
    * Handle requests to get the current value of the "Current Heating Cooling State" characteristic
    */
   getCurrentHeaterCoolerState(): CharacteristicValue {
-    let mode = this.device.getMode(),
-      state;
+    const mode = this.device.getMode();
+    let state;
 
     switch (mode) {
       case Commands.mode.value.cool:
@@ -186,7 +266,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
         state = hap.Characteristic.CurrentHeaterCoolerState.INACTIVE;
     }
 
-    this.logger.info('Triggered GET CurrentHeatingCoolingState: %s', state);
+    this.logger.debug('Triggered GET CurrentHeatingCoolingState: %s', state);
     return state;
   }
 
@@ -237,9 +317,9 @@ class CHThermostatAccessory implements AccessoryPlugin {
    * Handle requests to get the current value of the "Target Temperature" characteristic
    */
   getTargetTemperature(): number {
-    const currentValue = this.device.getTargetTemp();
+    const currentValue = this.device.getTargetTemp() || this.currentTemp;
 
-    this.logger.info('Triggered GET TargetTemperature: %s', currentValue);
+    this.logger.debug('Triggered GET TargetTemperature: %s', currentValue);
 
     return currentValue;
   }
@@ -272,7 +352,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
 
   getThermostatActive() {
     const mode = this.device.getPower();
-    this.logger.info('Triggered Get ThermostatActive: %s', mode);
+    this.logger.debug('Triggered GET ThermostatActive: %s', mode);
 
     return mode === Commands.power.value.off
       ? hap.Characteristic.Active.INACTIVE
@@ -282,7 +362,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
   setThermostatActive(value: CharacteristicValue) {
     const mode = this.device.getPower();
 
-    this.logger.info('Triggered Set ThermostatActive: %s', mode);
+    this.logger.info('Triggered SET ThermostatActive: %s', mode);
 
     if (mode === hap.Characteristic.Active.INACTIVE &&
       value === hap.Characteristic.Active.INACTIVE
@@ -299,7 +379,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
 
   getSwingMode(): CharacteristicValue {
     const mode = this.device.getSwingVert();
-    this.logger.info('Triggered Get SwingMode: %s', mode);
+    this.logger.debug('Triggered GET SwingMode: %s', mode);
 
     return Commands.swingVert.fixedValues.includes(mode)
       ? hap.Characteristic.SwingMode.SWING_DISABLED
@@ -307,7 +387,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
   }
 
   setSwingMode(value: CharacteristicValue) {
-    this.logger.info('Triggered Set SwingMode: %s', value);
+    this.logger.debug('Triggered SET SwingMode: %s', value);
 
     this.device.setSwingVert(value === hap.Characteristic.SwingMode.SWING_DISABLED ?
       Commands.swingVert.value.default
@@ -316,14 +396,14 @@ class CHThermostatAccessory implements AccessoryPlugin {
 
   getRotationSpeed(): CharacteristicValue {
     const speed = this.device.getFanSpeed();
-    this.logger.info('Triggered Get RotationSpeed: %s', speed);
+    this.logger.debug('Triggered GET RotationSpeed: %s', speed);
     return speed === Commands.fanSpeed.value.auto ? 6 : speed;
   }
 
   setRotationSpeed(value: CharacteristicValue) {
     const speed =
       value === 6 ? Commands.fanSpeed.value.auto : value;
-    this.logger.info('Triggered Set RotationSpeed: %s', speed);
+    this.logger.debug('Triggered Set RotationSpeed: %s', speed);
 
     this.device.setFanSpeed(parseInt('' + speed));
   }
@@ -374,7 +454,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
           .updateValue(this.getRotationSpeed());
       },
       onUpdate: (deviceInfo: DeviceInfo) => {
-        this.logger.info('Status updated on %s', deviceInfo.name);
+        this.logger.debug('Status updated on %s', deviceInfo.name);
       },
       onConnected: (deviceInfo: DeviceInfo) => {
         this.logger.info('Connected to: %s', deviceInfo.name);
@@ -393,14 +473,14 @@ class CHThermostatAccessory implements AccessoryPlugin {
         }
       },
       onError: (deviceInfo: DeviceInfo) => {
-        this.logger.info(
+        this.logger.error(
           'Error communicating with device %s with IP address %s',
           deviceInfo.name,
           deviceInfo.address,
         );
       },
       onDisconnected: (deviceInfo: DeviceInfo) => {
-        this.logger.info(
+        this.logger.error(
           'Disconnected from device %s with IP address %s',
           deviceInfo.name,
           deviceInfo.address,
