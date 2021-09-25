@@ -1,9 +1,9 @@
 import http from 'http';
-import fakegato from 'fakegato-history';
 
 import { Service, Logging, AccessoryConfig, API, AccessoryPlugin, HAP, CharacteristicValue } from 'homebridge';
 import { Device, DeviceInfo, DeviceOptions } from './lib/deviceFactory';
 import { Commands } from './lib/commands';
+import { EveHistoryService, HistoryServiceStorageEntry } from './lib/historyService';
 
 let hap: HAP;
 
@@ -14,31 +14,6 @@ export = (api: API) => {
   hap = api.hap;
   api.registerAccessory('homebridge-ch-ac-ts', 'Cooper&HunterAC', CHThermostatAccessory);
 };
-
-interface HistoryServiceEntry {
-  time: number;
-  temp: number;
-}
-
-interface HistoryService {
-  addEntry(entry: HistoryServiceEntry): void;
-}
-
-interface HistoryServiceStorageEntry {
-  time: number;
-  temp: number;
-}
-
-interface HistoryServiceStorageReaderOptions {
-  service: unknown;
-  callback: (err: unknown, data: string) => void;
-}
-
-interface HistoryServiceStorage {
-  globalFakeGatoStorage: {
-    read: (options: HistoryServiceStorageReaderOptions) => void;
-  };
-}
 
 interface AutomationReturn {
   error: boolean;
@@ -56,7 +31,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
   private readonly name: string;
   private readonly serial: string;
   private readonly model: string;
-  private readonly thermostatService: Service;
+  private readonly heaterCoolerService: Service;
   private readonly serviceInfo: Service;
   private readonly host: string;
   private readonly updateInterval: number;
@@ -64,7 +39,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
   private readonly log: Logging;
   private readonly displayName: string;
 
-  private readonly historyService: unknown;
+  private readonly historyService: EveHistoryService;
 
   private currentTemp: number;
 
@@ -74,9 +49,6 @@ class CHThermostatAccessory implements AccessoryPlugin {
     hap = api.hap;
 
     this.log = logger;
-
-    const FakeGatoHistoryService = fakegato(api);
-    this.historyService = new FakeGatoHistoryService('thermo', this, { storage: 'fs' });
 
     // extract name from config
     this.name = config.name;
@@ -88,6 +60,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
     this.httpPort = this.config.httpPort || 4567;
     this.currentTemp = 20;
 
+
     // Set AccessoryInformation
     this.serviceInfo = new hap.Service.AccessoryInformation()
       .setCharacteristic(hap.Characteristic.Manufacturer, 'Cooper&Hunter')
@@ -96,21 +69,29 @@ class CHThermostatAccessory implements AccessoryPlugin {
       .setCharacteristic(hap.Characteristic.SerialNumber, this.serial);
 
     // create a new Thermostat service
-    this.thermostatService = new hap.Service.Thermostat(this.name);
+    this.heaterCoolerService = new hap.Service.HeaterCooler(this.name);
 
     // create handlers for required characteristics
-    this.thermostatService.getCharacteristic(hap.Characteristic.Active)
+    this.heaterCoolerService.getCharacteristic(hap.Characteristic.Active)
       .onGet(this.getThermostatActive.bind(this))
       .onSet(this.setThermostatActive.bind(this));
 
-    this.thermostatService.getCharacteristic(hap.Characteristic.CurrentHeatingCoolingState)
+    this.heaterCoolerService.getCharacteristic(hap.Characteristic.CoolingThresholdTemperature)
+      .onGet(this.getTargetTemperature.bind(this))
+      .onSet(this.setTargetTemperature.bind(this));
+
+    this.heaterCoolerService.getCharacteristic(hap.Characteristic.HeatingThresholdTemperature)
+      .onGet(this.getTargetTemperature.bind(this))
+      .onSet(this.setTargetTemperature.bind(this));
+
+    this.heaterCoolerService.getCharacteristic(hap.Characteristic.CurrentHeatingCoolingState)
       .onGet(this.getCurrentHeaterCoolerState.bind(this));
 
-    this.thermostatService.getCharacteristic(hap.Characteristic.TargetHeatingCoolingState)
+    this.heaterCoolerService.getCharacteristic(hap.Characteristic.TargetHeatingCoolingState)
       .onGet(this.getTargetHeaterCoolerState.bind(this))
       .onSet(this.setTargetHeaterCoolerState.bind(this));
 
-    this.thermostatService.getCharacteristic(hap.Characteristic.CurrentTemperature)
+    this.heaterCoolerService.getCharacteristic(hap.Characteristic.CurrentTemperature)
       .setProps({
         minValue: 15,
         maxValue: 40,
@@ -118,19 +99,19 @@ class CHThermostatAccessory implements AccessoryPlugin {
       })
       .onGet(this.getCurrentTemperature.bind(this));
 
-    this.thermostatService.getCharacteristic(hap.Characteristic.TargetTemperature)
+    this.heaterCoolerService.getCharacteristic(hap.Characteristic.TargetTemperature)
       .onGet(this.getTargetTemperature.bind(this))
       .onSet(this.setTargetTemperature.bind(this));
 
-    this.thermostatService.getCharacteristic(hap.Characteristic.TemperatureDisplayUnits)
+    this.heaterCoolerService.getCharacteristic(hap.Characteristic.TemperatureDisplayUnits)
       .onGet(this.getTemperatureDisplayUnits.bind(this))
       .onSet(this.setTemperatureDisplayUnits.bind(this));
 
-    this.thermostatService.getCharacteristic(hap.Characteristic.SwingMode)
+    this.heaterCoolerService.getCharacteristic(hap.Characteristic.SwingMode)
       .onGet(this.getSwingMode.bind(this))
       .onSet(this.setSwingMode.bind(this));
 
-    this.thermostatService.getCharacteristic(hap.Characteristic.RotationSpeed)
+    this.heaterCoolerService.getCharacteristic(hap.Characteristic.RotationSpeed)
       .setProps({
         format: hap.Characteristic.Formats.UINT8,
         maxValue: 6,
@@ -140,7 +121,10 @@ class CHThermostatAccessory implements AccessoryPlugin {
       .onGet(this.getRotationSpeed.bind(this))
       .onSet(this.setRotationSpeed.bind(this));
 
-    this.device = this.discover(this.thermostatService);
+
+    this.device = this.discover(this.heaterCoolerService);
+
+    this.historyService = new EveHistoryService(this, this.api, this.logger);
 
     this.readLastTemperature();
 
@@ -181,9 +165,10 @@ class CHThermostatAccessory implements AccessoryPlugin {
     if (parts[1] === 'temp') {
       const tempParts = parts[2].split('%');
       if (tempParts.length > 0) {
-        this.currentTemp = parseFloat('' + tempParts[0]);
+        this.updateCurrentTemperature(parseFloat('' + tempParts[0]));
 
-        (this.historyService as HistoryService).addEntry({ time: Math.round(new Date().valueOf() / 1000), temp: this.currentTemp });
+        this.historyService.addEntry({ time: Math.round(new Date().valueOf() / 1000), temp: this.currentTemp });
+
 
         const message = 'Updated accessory current temperature to: ' + this.currentTemp;
         this.logger.info(message);
@@ -204,45 +189,23 @@ class CHThermostatAccessory implements AccessoryPlugin {
   getServices(): Service[] {
     return [
       this.serviceInfo,
-      this.thermostatService,
-      this.historyService as Service,
+      this.heaterCoolerService,
+      this.historyService.getService(),
     ];
   }
 
   readLastTemperature() {
     const lastEntryHandler = (lastEntry: string, history: HistoryServiceStorageEntry[]) => {
-      this.logger.debug('HISTORY total: %s', history.length);
       const lastItem = history.pop();
-      this.logger.debug('HISTORY last itme: %s', lastItem);
-      this.currentTemp = lastItem.temp;
+      if (lastItem) {
+        this.logger.debug('History: last item: %s', lastItem);
+        this.updateCurrentTemperature(lastItem.temp);
+      } else {
+        this.logger.debug('History: no data');
+      }
     };
 
-    const storage = ((this.api as unknown) as HistoryServiceStorage).globalFakeGatoStorage;
-
-    if (!storage) {
-      this.logger.debug('Failed to access globalFakeGatoStorage');
-      return;
-    }
-
-    storage.read({
-      service: this.historyService,
-      callback: function (err, data) {
-        if (!err) {
-          if (data) {
-            try {
-              this.log.debug('read data from', this.accessoryName, ':', data);
-              const jsonFile = typeof (data) === 'object' ? data : JSON.parse(data);
-              lastEntryHandler(jsonFile.lastEntry, jsonFile.history as HistoryServiceStorageEntry[]);
-            } catch (e) {
-              this.log.debug('**ERROR fetching persisting data restart from zero - invalid JSON**', e);
-            }
-          }
-        } else {
-          // file don't exists
-          this.log.debug('**ERROR fetching persisting data: file dont exists', err);
-        }
-      }.bind(this),
-    });
+    this.historyService.readHistory(lastEntryHandler);
   }
 
   /**
@@ -277,7 +240,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
   getTargetHeaterCoolerState() {
     const currentValue = hap.Characteristic.TargetHeatingCoolingState.OFF;
 
-    this.logger.info('Triggered GET TargetHeatingCoolingState: %s', currentValue);
+    this.logger.debug('Triggered GET TargetHeatingCoolingState: %s', currentValue);
     return currentValue;
   }
 
@@ -302,6 +265,14 @@ class CHThermostatAccessory implements AccessoryPlugin {
     this.logger.info('Triggered SET TargetHeaterCoolerState: %s', mode);
 
     this.device.setMode(mode);
+  }
+
+  updateCurrentTemperature(currentTemp: number) {
+    this.currentTemp = currentTemp;
+
+    this.heaterCoolerService
+      .getCharacteristic(hap.Characteristic.CurrentTemperature)
+      .updateValue(this.getCurrentTemperature());
   }
 
   /**
@@ -360,11 +331,11 @@ class CHThermostatAccessory implements AccessoryPlugin {
   }
 
   setThermostatActive(value: CharacteristicValue) {
-    const mode = this.device.getPower();
+    const deviceOff = this.device.getPower();
 
-    this.logger.info('Triggered SET ThermostatActive: %s', mode);
+    this.logger.info('Triggered SET ThermostatActive: %s', deviceOff);
 
-    if (mode === hap.Characteristic.Active.INACTIVE &&
+    if (deviceOff &&
       value === hap.Characteristic.Active.INACTIVE
     ) {
       // Do nothing, device is turned off
@@ -395,7 +366,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
   }
 
   getRotationSpeed(): CharacteristicValue {
-    const speed = this.device.getFanSpeed();
+    const speed = this.device.getFanSpeed() || Commands.fanSpeed.value.auto;
     this.logger.debug('Triggered GET RotationSpeed: %s', speed);
     return speed === Commands.fanSpeed.value.auto ? 6 : speed;
   }

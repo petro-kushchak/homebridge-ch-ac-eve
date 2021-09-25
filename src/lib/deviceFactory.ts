@@ -268,8 +268,8 @@ export class Device {
         );
     };
 
-    getPower() {
-        return this.deviceInfo.props[Commands.power.code];
+    getPower(): boolean {
+        return this.deviceInfo.props[Commands.power.code] || false;
     };
 
     /**
@@ -284,7 +284,7 @@ export class Device {
         );
     };
 
-    getTargetTemp() {
+    getTargetTemp(): number {
         return this.deviceInfo.props[Commands.temperature.code];
     };
 
@@ -299,8 +299,8 @@ export class Device {
         );
     };
 
-    getMode() {
-        return this.deviceInfo.props[Commands.mode.code];
+    getMode(): number {
+        return this.deviceInfo.props[Commands.mode.code] || Commands.mode.value.auto ;
     };
 
     /**
@@ -314,8 +314,8 @@ export class Device {
         );
     };
 
-    getFanSpeed() {
-        return this.deviceInfo.props[Commands.fanSpeed.code];
+    getFanSpeed(): number {
+        return this.deviceInfo.props[Commands.fanSpeed.code] || Commands.fanSpeed.value.auto;
     };
 
     /**
@@ -329,8 +329,8 @@ export class Device {
         );
     };
 
-    getSwingVert() {
-        return this.deviceInfo.props[Commands.swingVert.code];
+    getSwingVert(): number {
+        return this.deviceInfo.props[Commands.swingVert.code] || Commands.swingVert.value.default;
     };
 
     getRoomTemp() {
