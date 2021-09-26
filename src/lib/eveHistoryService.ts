@@ -1,18 +1,13 @@
 import fakegato from 'fakegato-history';
 import { AccessoryPlugin, API, Logging, Service } from 'homebridge';
 
-export interface HistoryServiceEntry {
+export interface HistoryServiceThermoEntry {
     time: number;
-    temp: number;
+    currentTemp: number;
 }
 
 export interface HistoryService {
-    addEntry(entry: HistoryServiceEntry): void;
-}
-
-export interface HistoryServiceStorageEntry {
-    time: number;
-    temp: number;
+    addEntry(entry: HistoryServiceThermoEntry): void;
 }
 
 export interface HistoryServiceStorageReaderOptions {
@@ -39,11 +34,11 @@ export class EveHistoryService {
         return this.historyService as Service;
     }
 
-    addEntry(entry: HistoryServiceStorageEntry) {
+    addEntry(entry: HistoryServiceThermoEntry) {
         (this.historyService as HistoryService).addEntry(entry);
     }
 
-    readHistory(lastEntryHandler: (lastEntry: string, history: HistoryServiceStorageEntry[]) => void) {
+    readHistory(lastEntryHandler: (lastEntry: string, history: HistoryServiceThermoEntry[]) => void) {
         const storage = ((this.api as unknown) as HistoryServiceStorage).globalFakeGatoStorage;
 
         if (!storage) {
@@ -60,7 +55,7 @@ export class EveHistoryService {
                         try {
                             this.logger.debug('read data from', this.accessory, ':', data);
                             const jsonFile = typeof (data) === 'object' ? data : JSON.parse(data);
-                            lastEntryHandler(jsonFile.lastEntry, jsonFile.history as HistoryServiceStorageEntry[]);
+                            lastEntryHandler(jsonFile.lastEntry, jsonFile.history as HistoryServiceThermoEntry[]);
                         } catch (e) {
                             this.logger.debug('**ERROR fetching persisting data restart from zero - invalid JSON**', e);
                         }
