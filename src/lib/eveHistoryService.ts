@@ -1,6 +1,5 @@
 import fakegato from 'fakegato-history';
 import { AccessoryPlugin, API, Logging, Service } from 'homebridge';
-import { Server } from 'http';
 
 export interface HistoryServiceEntry {
     time: number;
@@ -59,16 +58,16 @@ export class EveHistoryService {
                 if (!err) {
                     if (data) {
                         try {
-                            this.log.debug('read data from', this.accessoryName, ':', data);
+                            this.logger.debug('read data from', this.accessory, ':', data);
                             const jsonFile = typeof (data) === 'object' ? data : JSON.parse(data);
                             lastEntryHandler(jsonFile.lastEntry, jsonFile.history as HistoryServiceStorageEntry[]);
                         } catch (e) {
-                            this.log.debug('**ERROR fetching persisting data restart from zero - invalid JSON**', e);
+                            this.logger.debug('**ERROR fetching persisting data restart from zero - invalid JSON**', e);
                         }
                     }
                 } else {
                     // file don't exists
-                    this.log.debug('**ERROR fetching persisting data: file dont exists', err);
+                    this.logger.debug('**ERROR fetching persisting data: file dont exists', err);
                 }
             }.bind(this),
         });

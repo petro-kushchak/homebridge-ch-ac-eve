@@ -245,6 +245,8 @@ export class Device {
      * @param {number} [port] Port number
      */
     _sendRequest(message: any, address = this.deviceInfo.address, port = this.deviceInfo.port) {
+        this.logger.debug('Send command: %s', JSON.stringify(message));
+
         const encryptedMessage = this.encryptionService.encrypt(message, this.deviceInfo.key);
         const request = {
             cid: 'app',
@@ -261,15 +263,15 @@ export class Device {
      * Turn on/off
      * @param {boolean} value State
      */
-    setPower(value: boolean) {
+    setPower(value: number) {
         this._sendCommand(
             [Commands.power.code],
             [value ? 1 : 0]
         );
     };
 
-    getPower(): boolean {
-        return this.deviceInfo.props[Commands.power.code] || false;
+    getPower(): number {
+        return this.deviceInfo.props[Commands.power.code] || 0;
     };
 
     /**
@@ -300,7 +302,7 @@ export class Device {
     };
 
     getMode(): number {
-        return this.deviceInfo.props[Commands.mode.code] || Commands.mode.value.auto ;
+        return this.deviceInfo.props[Commands.mode.code] || Commands.mode.value.auto;
     };
 
     /**

@@ -3,8 +3,8 @@ export const Commands = {
     power: {
         code: 'Pow',
         value: {
-            off: false,
-            on: true
+            off: 0,
+            on: 1
         }
     },
     // mode of operation

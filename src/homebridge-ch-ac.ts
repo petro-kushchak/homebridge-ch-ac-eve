@@ -1,9 +1,8 @@
-import http from 'http';
-
 import { Service, Logging, AccessoryConfig, API, AccessoryPlugin, HAP, CharacteristicValue } from 'homebridge';
 import { Device, DeviceInfo, DeviceOptions } from './lib/deviceFactory';
 import { Commands } from './lib/commands';
-import { EveHistoryService, HistoryServiceStorageEntry } from './lib/historyService';
+import { EveHistoryService, HistoryServiceStorageEntry } from './lib/eveHistoryService';
+import { HttpService, AutomationReturn } from './lib/httpService';
 
 let hap: HAP;
 
@@ -14,12 +13,6 @@ export = (api: API) => {
   hap = api.hap;
   api.registerAccessory('homebridge-ch-ac-ts', 'Cooper&HunterAC', CHThermostatAccessory);
 };
-
-interface AutomationReturn {
-  error: boolean;
-  message: string;
-  cooldownActive?: boolean;
-}
 
 /**
  * Platform Accessory
@@ -40,6 +33,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
   private readonly displayName: string;
 
   private readonly historyService: EveHistoryService;
+  private readonly httpService: HttpService;
 
   private currentTemp: number;
 
@@ -128,21 +122,8 @@ class CHThermostatAccessory implements AccessoryPlugin {
 
     this.readLastTemperature();
 
-    this.logger.info('Setting up HTTP server on port ' + this.httpPort + '...');
-    const server = http.createServer();
-    server.listen(this.httpPort);
-    server.on('request', (request: http.IncomingMessage, response: http.ServerResponse) => {
-      let results: AutomationReturn = {
-        error: true,
-        message: 'Malformed URL.',
-      };
-      if (request.url) {
-        results = this.httpHandler(request.url);
-      }
-      response.writeHead(results.error ? 500 : 200);
-      response.write(JSON.stringify(results));
-      response.end();
-    });
+    this.httpService = new HttpService(this.httpPort, this.logger);
+    this.httpService.start((fullPath: string) => this.httpHandler(fullPath));
 
   }
 
@@ -166,9 +147,6 @@ class CHThermostatAccessory implements AccessoryPlugin {
       const tempParts = parts[2].split('%');
       if (tempParts.length > 0) {
         this.updateCurrentTemperature(parseFloat('' + tempParts[0]));
-
-        this.historyService.addEntry({ time: Math.round(new Date().valueOf() / 1000), temp: this.currentTemp });
-
 
         const message = 'Updated accessory current temperature to: ' + this.currentTemp;
         this.logger.info(message);
@@ -273,6 +251,9 @@ class CHThermostatAccessory implements AccessoryPlugin {
     this.heaterCoolerService
       .getCharacteristic(hap.Characteristic.CurrentTemperature)
       .updateValue(this.getCurrentTemperature());
+
+    this.historyService
+      .addEntry({ time: Math.round(new Date().valueOf() / 1000), temp: this.currentTemp });
   }
 
   /**
@@ -331,7 +312,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
   }
 
   setThermostatActive(value: CharacteristicValue) {
-    const deviceOff = this.device.getPower();
+    const deviceOff = !this.device.getPower();
 
     this.logger.info('Triggered SET ThermostatActive: %s', deviceOff);
 
