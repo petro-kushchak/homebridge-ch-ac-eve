@@ -1,7 +1,7 @@
 import { Service, Logging, AccessoryConfig, API, AccessoryPlugin, HAP, CharacteristicValue } from 'homebridge';
 import { Device, DeviceInfo, DeviceOptions } from './lib/deviceFactory';
 import { Commands } from './lib/commands';
-import { EveHistoryService, HistoryServiceThermoEntry } from './lib/eveHistoryService';
+import { EveHistoryService, HistoryServiceEntry } from './lib/eveHistoryService';
 import { HttpService, AutomationReturn } from './lib/httpService';
 
 let hap: HAP;
@@ -173,7 +173,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
   }
 
   readLastTemperature() {
-    const lastEntryHandler = (lastEntry: string, history: HistoryServiceThermoEntry[]) => {
+    const lastEntryHandler = (lastEntry: string, history: HistoryServiceEntry[]) => {
       const lastItem = history.pop();
       if (lastItem) {
         this.logger.debug('History: last item: %s', lastItem);
