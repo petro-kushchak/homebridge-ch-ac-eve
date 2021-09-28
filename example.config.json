@@ -12,7 +12,7 @@
             "name": "Bedroom AC",
             "serial": "ch-00-00-01",
             "model": "CH-S09FTXE WIFI",
-            "webHookPort": 1234,
+            "httpPort": 4567,
             "updateInterval": 10000
         }
     ]
