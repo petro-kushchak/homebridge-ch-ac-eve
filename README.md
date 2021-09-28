@@ -18,9 +18,12 @@ Should work with all Cooper&Hunter AC controlled by EWPE Smart APP.
 For each AC device you need to add an accessory and specify the IP address of the device. 
 Some of Cooper&Hunter AC does not provide current temperature information, so this plugin allows to fetch this data from another Homebridge plugin using "globals" dictionary
 
-## Endpoint for AC temperature
+## AC room temperature
+Some of Cooper&Hunter ACs are not exposing room temperature over APIs, so there is a need to provide AC temperature from other source.
 
-Once plugin is started you can enable HomeKit automation to send room temperature sensor information. Currently plugin supports URL (example with Homebridge Raspberry Pi setup and default httpPort: 4567):
+## Endpoint for AC temperature
+This plugin supports temperature updates from http web hook. You can enable HomeKit automation to send room temperature sensor information.
+Once plugin is started, it starts http server with port httpPort. Currently plugin supports URL (example with Homebridge Raspberry Pi setup and default httpPort: 4567):
 ```
 GET http://homebridge.localhost:4567/temp/21.5%32%C
 ```
