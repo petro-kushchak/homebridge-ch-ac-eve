@@ -5,7 +5,7 @@
 
 </p>
 
-# Cooper&Hunter AC plugin for Homebridge
+# Cooper&Hunter AC plugin for Homebridge (with Eve app temp/humidity monitoring)
 
 
 This plugin is based on https://github.com/norberttech/homebridge-ch-ac
