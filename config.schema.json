@@ -9,7 +9,7 @@
         "title": "Name",
         "type": "string",
         "required": true,
-        "default": "Cooper&Hunter AC"
+        "default": "Cooper&HunterAC"
       },
       "model": {
         "title": "Model",
