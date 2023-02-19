@@ -7,7 +7,7 @@
     },
     "accessories": [
         {
-            "accessory": "C&H-AC",
+            "accessory": "Cooper&HunterAC",
             "host": "192.168.1.X",
             "name": "Bedroom AC",
             "serial": "ch-00-00-01",

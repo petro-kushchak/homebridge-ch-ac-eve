@@ -11,7 +11,7 @@ let hap: HAP;
  */
 export = (api: API) => {
   hap = api.hap;
-  api.registerAccessory('homebridge-ch-ac-ts', 'Cooper&HunterAC', CHThermostatAccessory);
+  api.registerAccessory('Cooper&HunterAC', CHThermostatAccessory);
 };
 
 /**
