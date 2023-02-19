@@ -48,7 +48,7 @@ Fakegato  open source project [fakegato-history](https://github.com/simont77/fak
     },
     "accessories": [
         {
-            "accessory": "CooperHunterAC",
+            "accessory": "Cooper&HunterAC",
             "host": "192.168.1.X",
             "name": "Bedroom AC",
             "serial": "ch-00-00-01",
@@ -57,7 +57,7 @@ Fakegato  open source project [fakegato-history](https://github.com/simont77/fak
             "updateInterval": 10000
         },
         {
-            "accessory": "CooperHunterAC",
+            "accessory": "Cooper&HunterAC",
             "host": "192.168.1.Y",
             "name": "Living room AC",
             "serial": "ch-00-00-02",
