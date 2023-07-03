@@ -1,7 +1,18 @@
-import { Service, Logging, AccessoryConfig, API, AccessoryPlugin, HAP, CharacteristicValue } from 'homebridge';
+import {
+  Service,
+  Logging,
+  AccessoryConfig,
+  API,
+  AccessoryPlugin,
+  HAP,
+  CharacteristicValue,
+} from 'homebridge';
 import { Device, DeviceInfo, DeviceOptions } from './lib/deviceFactory';
 import { Commands } from './lib/commands';
-import { EveHistoryService, HistoryServiceEntry } from './lib/eveHistoryService';
+import {
+  EveHistoryService,
+  HistoryServiceEntry,
+} from './lib/eveHistoryService';
 import { HttpService, AutomationReturn } from './lib/httpService';
 
 let hap: HAP;
@@ -29,6 +40,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
   private readonly host: string;
   private readonly updateInterval: number;
   private readonly httpPort: number;
+  private readonly acPort: number;
   private readonly log: Logging;
   private readonly displayName: string;
 
@@ -38,8 +50,10 @@ class CHThermostatAccessory implements AccessoryPlugin {
   private currentTemp: number;
 
   constructor(
-    private logger: Logging, private config: AccessoryConfig, private api: API) {
-
+    private logger: Logging,
+    private config: AccessoryConfig,
+    private api: API,
+  ) {
     hap = api.hap;
 
     this.log = logger;
@@ -52,8 +66,8 @@ class CHThermostatAccessory implements AccessoryPlugin {
     this.model = config.model || 'Cooper&Hunter';
     this.updateInterval = config.updateInterval || 10000;
     this.httpPort = this.config.httpPort || 4567;
+    this.acPort = this.config.acPort || 0;
     this.currentTemp = 20;
-
 
     // Set AccessoryInformation
     this.serviceInfo = new hap.Service.AccessoryInformation()
@@ -66,26 +80,32 @@ class CHThermostatAccessory implements AccessoryPlugin {
     this.heaterCoolerService = new hap.Service.HeaterCooler(this.name);
 
     // create handlers for required characteristics
-    this.heaterCoolerService.getCharacteristic(hap.Characteristic.Active)
+    this.heaterCoolerService
+      .getCharacteristic(hap.Characteristic.Active)
       .onGet(this.getThermostatActive.bind(this))
       .onSet(this.setThermostatActive.bind(this));
 
-    this.heaterCoolerService.getCharacteristic(hap.Characteristic.CoolingThresholdTemperature)
+    this.heaterCoolerService
+      .getCharacteristic(hap.Characteristic.CoolingThresholdTemperature)
       .onGet(this.getTargetTemperature.bind(this))
       .onSet(this.setTargetTemperature.bind(this));
 
-    this.heaterCoolerService.getCharacteristic(hap.Characteristic.HeatingThresholdTemperature)
+    this.heaterCoolerService
+      .getCharacteristic(hap.Characteristic.HeatingThresholdTemperature)
       .onGet(this.getTargetTemperature.bind(this))
       .onSet(this.setTargetTemperature.bind(this));
 
-    this.heaterCoolerService.getCharacteristic(hap.Characteristic.CurrentHeatingCoolingState)
+    this.heaterCoolerService
+      .getCharacteristic(hap.Characteristic.CurrentHeatingCoolingState)
       .onGet(this.getCurrentHeaterCoolerState.bind(this));
 
-    this.heaterCoolerService.getCharacteristic(hap.Characteristic.TargetHeatingCoolingState)
+    this.heaterCoolerService
+      .getCharacteristic(hap.Characteristic.TargetHeatingCoolingState)
       .onGet(this.getTargetHeaterCoolerState.bind(this))
       .onSet(this.setTargetHeaterCoolerState.bind(this));
 
-    this.heaterCoolerService.getCharacteristic(hap.Characteristic.CurrentTemperature)
+    this.heaterCoolerService
+      .getCharacteristic(hap.Characteristic.CurrentTemperature)
       .setProps({
         minValue: 15,
         maxValue: 40,
@@ -93,19 +113,23 @@ class CHThermostatAccessory implements AccessoryPlugin {
       })
       .onGet(this.getCurrentTemperature.bind(this));
 
-    this.heaterCoolerService.getCharacteristic(hap.Characteristic.TargetTemperature)
+    this.heaterCoolerService
+      .getCharacteristic(hap.Characteristic.TargetTemperature)
       .onGet(this.getTargetTemperature.bind(this))
       .onSet(this.setTargetTemperature.bind(this));
 
-    this.heaterCoolerService.getCharacteristic(hap.Characteristic.TemperatureDisplayUnits)
+    this.heaterCoolerService
+      .getCharacteristic(hap.Characteristic.TemperatureDisplayUnits)
       .onGet(this.getTemperatureDisplayUnits.bind(this))
       .onSet(this.setTemperatureDisplayUnits.bind(this));
 
-    this.heaterCoolerService.getCharacteristic(hap.Characteristic.SwingMode)
+    this.heaterCoolerService
+      .getCharacteristic(hap.Characteristic.SwingMode)
       .onGet(this.getSwingMode.bind(this))
       .onSet(this.setSwingMode.bind(this));
 
-    this.heaterCoolerService.getCharacteristic(hap.Characteristic.RotationSpeed)
+    this.heaterCoolerService
+      .getCharacteristic(hap.Characteristic.RotationSpeed)
       .setProps({
         format: hap.Characteristic.Formats.UINT8,
         maxValue: 6,
@@ -115,7 +139,6 @@ class CHThermostatAccessory implements AccessoryPlugin {
       .onGet(this.getRotationSpeed.bind(this))
       .onSet(this.setRotationSpeed.bind(this));
 
-
     this.device = this.discover(this.heaterCoolerService);
 
     this.historyService = new EveHistoryService(this, this.api, this.logger);
@@ -124,11 +147,10 @@ class CHThermostatAccessory implements AccessoryPlugin {
 
     this.httpService = new HttpService(this.httpPort, this.logger);
     this.httpService.start((fullPath: string) => this.httpHandler(fullPath));
-
   }
 
   httpHandler(fullPath: string): AutomationReturn {
-    this.logger.info('Received request: %s', fullPath);
+    this.logger.info(`Received request: ${fullPath}`);
 
     const parts = fullPath.split('/');
 
@@ -148,7 +170,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
       if (tempParts.length > 0) {
         this.updateCurrentTemperature(parseFloat('' + tempParts[0]));
 
-        const message = 'Updated accessory current temperature to: ' + this.currentTemp;
+        const message = `Updated accessory current temperature to: ${this.currentTemp}`;
         this.logger.info(message);
         return {
           error: false,
@@ -161,7 +183,6 @@ class CHThermostatAccessory implements AccessoryPlugin {
       error: false,
       message: 'OK',
     };
-
   }
 
   getServices(): Service[] {
@@ -173,10 +194,13 @@ class CHThermostatAccessory implements AccessoryPlugin {
   }
 
   readLastTemperature() {
-    const lastEntryHandler = (lastEntry: string, history: HistoryServiceEntry[]) => {
+    const lastEntryHandler = (
+      lastEntry: string,
+      history: HistoryServiceEntry[],
+    ) => {
       const lastItem = history.pop();
       if (lastItem) {
-        this.logger.debug('History: last item: %s', lastItem);
+        this.logger.debug(`History: last item: ${lastItem}`);
         this.updateCurrentTemperature(lastItem.currentTemp);
       } else {
         this.logger.debug('History: no data');
@@ -207,10 +231,9 @@ class CHThermostatAccessory implements AccessoryPlugin {
         state = hap.Characteristic.CurrentHeaterCoolerState.INACTIVE;
     }
 
-    this.logger.debug('Triggered GET CurrentHeatingCoolingState: %s', state);
+    this.logger.debug(`Triggered GET CurrentHeatingCoolingState: ${state}`);
     return state;
   }
-
 
   /**
    * Handle requests to get the current value of the "Target Heating Cooling State" characteristic
@@ -218,7 +241,9 @@ class CHThermostatAccessory implements AccessoryPlugin {
   getTargetHeaterCoolerState() {
     const currentValue = hap.Characteristic.TargetHeatingCoolingState.OFF;
 
-    this.logger.debug('Triggered GET TargetHeatingCoolingState: %s', currentValue);
+    this.logger.debug(
+      `Triggered GET TargetHeatingCoolingState: ${currentValue}`,
+    );
     return currentValue;
   }
 
@@ -226,7 +251,6 @@ class CHThermostatAccessory implements AccessoryPlugin {
    * Handle requests to set the "Target Heating Cooling State" characteristic
    */
   setTargetHeaterCoolerState(value: CharacteristicValue) {
-
     let mode = Commands.mode.value.auto;
 
     switch (value) {
@@ -240,7 +264,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
         mode = Commands.mode.value.auto;
     }
 
-    this.logger.info('Triggered SET TargetHeaterCoolerState: %s', mode);
+    this.logger.info(`Triggered SET TargetHeaterCoolerState: ${mode}`);
 
     this.device.setMode(mode);
   }
@@ -252,8 +276,10 @@ class CHThermostatAccessory implements AccessoryPlugin {
       .getCharacteristic(hap.Characteristic.CurrentTemperature)
       .updateValue(this.getCurrentTemperature());
 
-    this.historyService
-      .addEntry({ time: Math.round(new Date().valueOf() / 1000), currentTemp: this.currentTemp });
+    this.historyService.addEntry({
+      time: Math.round(new Date().valueOf() / 1000),
+      currentTemp: this.currentTemp,
+    });
   }
 
   /**
@@ -264,14 +290,13 @@ class CHThermostatAccessory implements AccessoryPlugin {
     return this.currentTemp;
   }
 
-
   /**
    * Handle requests to get the current value of the "Target Temperature" characteristic
    */
   getTargetTemperature(): number {
     const currentValue = this.device.getTargetTemp() || this.currentTemp;
 
-    this.logger.debug('Triggered GET TargetTemperature: %s', currentValue);
+    this.logger.debug(`Triggered GET TargetTemperature: ${currentValue}`);
 
     return currentValue;
   }
@@ -280,7 +305,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
    * Handle requests to set the "Target Temperature" characteristic
    */
   setTargetTemperature(value: CharacteristicValue) {
-    this.logger.info('Triggered SET TargetTemperature: %s', value);
+    this.logger.info(`Triggered SET TargetTemperature: ${value}`);
 
     this.device.setTargetTemp(parseInt('' + value));
   }
@@ -299,12 +324,12 @@ class CHThermostatAccessory implements AccessoryPlugin {
    * Handle requests to set the "Temperature Display Units" characteristic
    */
   setTemperatureDisplayUnits(value: CharacteristicValue) {
-    this.logger.debug('Triggered SET TemperatureDisplayUnits:' + value);
+    this.logger.debug(`Triggered SET TemperatureDisplayUnits: ${value}`);
   }
 
   getThermostatActive() {
     const mode = this.device.getPower();
-    this.logger.debug('Triggered GET ThermostatActive: %s', mode);
+    this.logger.debug(`Triggered GET ThermostatActive: ${mode}`);
 
     return mode === Commands.power.value.off
       ? hap.Characteristic.Active.INACTIVE
@@ -314,11 +339,9 @@ class CHThermostatAccessory implements AccessoryPlugin {
   setThermostatActive(value: CharacteristicValue) {
     const deviceOff = !this.device.getPower();
 
-    this.logger.info('Triggered SET ThermostatActive: %s', deviceOff);
+    this.logger.info(`Triggered SET ThermostatActive: ${deviceOff}`);
 
-    if (deviceOff &&
-      value === hap.Characteristic.Active.INACTIVE
-    ) {
+    if (deviceOff && value === hap.Characteristic.Active.INACTIVE) {
       // Do nothing, device is turned off
     } else {
       this.device.setPower(
@@ -331,7 +354,7 @@ class CHThermostatAccessory implements AccessoryPlugin {
 
   getSwingMode(): CharacteristicValue {
     const mode = this.device.getSwingVert();
-    this.logger.debug('Triggered GET SwingMode: %s', mode);
+    this.logger.debug(`Triggered GET SwingMode: ${mode}`);
 
     return Commands.swingVert.fixedValues.includes(mode)
       ? hap.Characteristic.SwingMode.SWING_DISABLED
@@ -339,23 +362,24 @@ class CHThermostatAccessory implements AccessoryPlugin {
   }
 
   setSwingMode(value: CharacteristicValue) {
-    this.logger.debug('Triggered SET SwingMode: %s', value);
+    this.logger.debug(`Triggered SET SwingMode: ${value}`);
 
-    this.device.setSwingVert(value === hap.Characteristic.SwingMode.SWING_DISABLED ?
-      Commands.swingVert.value.default
-      : Commands.swingVert.value.full);
+    this.device.setSwingVert(
+      value === hap.Characteristic.SwingMode.SWING_DISABLED
+        ? Commands.swingVert.value.default
+        : Commands.swingVert.value.full,
+    );
   }
 
   getRotationSpeed(): CharacteristicValue {
     const speed = this.device.getFanSpeed() || Commands.fanSpeed.value.auto;
-    this.logger.debug('Triggered GET RotationSpeed: %s', speed);
+    this.logger.debug(`Triggered GET RotationSpeed: ${speed}`);
     return speed === Commands.fanSpeed.value.auto ? 6 : speed;
   }
 
   setRotationSpeed(value: CharacteristicValue) {
-    const speed =
-      value === 6 ? Commands.fanSpeed.value.auto : value;
-    this.logger.debug('Triggered Set RotationSpeed: %s', speed);
+    const speed = value === 6 ? Commands.fanSpeed.value.auto : value;
+    this.logger.debug(`Triggered Set RotationSpeed: ${speed}`);
 
     this.device.setFanSpeed(parseInt('' + speed));
   }
@@ -363,10 +387,17 @@ class CHThermostatAccessory implements AccessoryPlugin {
   discover(thermostatService: Service): Device {
     const deviceOptions: DeviceOptions = {
       host: this.host,
-      port: 8000 + parseInt(this.host.split('.')[3]),
+      port:
+        this.acPort > 0
+          ? this.acPort
+          : 8000 + parseInt(this.host.split('.')[3]),
       updateInterval: this.updateInterval,
       onStatus: (deviceInfo: DeviceInfo) => {
-        this.logger.info('Status updated: %s props: %s', deviceInfo.name, JSON.stringify(deviceInfo.props));
+        this.logger.info(
+          `Status updated: ${deviceInfo.name} props: ${JSON.stringify(
+            deviceInfo.props,
+          )}`,
+        );
 
         if (deviceInfo.bound === false) {
           return;
@@ -388,7 +419,6 @@ class CHThermostatAccessory implements AccessoryPlugin {
           .getCharacteristic(hap.Characteristic.CurrentTemperature)
           .updateValue(this.getCurrentTemperature());
 
-
         const targetTemperature = this.getTargetTemperature();
         thermostatService
           .getCharacteristic(hap.Characteristic.CoolingThresholdTemperature)
@@ -406,40 +436,32 @@ class CHThermostatAccessory implements AccessoryPlugin {
           .updateValue(this.getRotationSpeed());
       },
       onUpdate: (deviceInfo: DeviceInfo) => {
-        this.logger.debug('Status updated on %s', deviceInfo.name);
+        this.logger.debug(`Status updated on ${deviceInfo.name}`);
       },
       onConnected: (deviceInfo: DeviceInfo) => {
-        this.logger.info('Connected to: %s', deviceInfo.name);
+        this.logger.info(`Connected to: ${deviceInfo.name}`);
         if (deviceInfo.bound === true) {
           this.logger.info(
-            'Connected to device "%s" with IP address "%s"',
-            deviceInfo.name,
-            deviceInfo.address,
+            `Connected to device "${deviceInfo.name}" with IP "${deviceInfo.address}"`,
           );
         } else {
           this.logger.info(
-            'Error connecting to %s with IP address %s',
-            deviceInfo.name,
-            deviceInfo.address,
+            `Error connecting to ${deviceInfo.name} with IP: ${deviceInfo.address}`,
           );
         }
       },
-      onError: (deviceInfo: DeviceInfo) => {
+      onError: (deviceInfo: DeviceInfo, err) => {
         this.logger.error(
-          'Error communicating with device %s with IP address %s',
-          deviceInfo.name,
-          deviceInfo.address,
+          `Error communicating with device ${deviceInfo.name} with IP: ${deviceInfo.address}, details: ${err}`,
         );
       },
       onDisconnected: (deviceInfo: DeviceInfo) => {
         this.logger.error(
-          'Disconnected from device %s with IP address %s',
-          deviceInfo.name,
-          deviceInfo.address,
+          `Disconnected from device ${deviceInfo.name} with IP: ${deviceInfo.address}`,
         );
       },
     };
-    this.logger.info('Started discover device %s', deviceOptions.host);
+    this.logger.info(`Started discover device ${deviceOptions.host}`);
     return new Device(deviceOptions, this.logger);
   }
 }

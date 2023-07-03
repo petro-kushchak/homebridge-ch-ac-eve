@@ -34,6 +34,18 @@
         "type": "number",
         "required": false,
         "default": "10000"
+      },
+      "httpPort": {
+        "title": "HTTP port (for web hooks)",
+        "type": "number",
+        "required": false,
+        "default": "4567"
+      },
+      "acPort": {
+        "title": "AC port (if non-strandard)",
+        "type": "number",
+        "required": false,
+        "default": "0"
       }
     }
   }

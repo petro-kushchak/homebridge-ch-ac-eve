@@ -13,6 +13,7 @@
             "serial": "ch-00-00-01",
             "model": "CH-S09FTXE WIFI",
             "httpPort": 4567,
+            "acPort": 7000,
             "updateInterval": 10000
         }
     ]
